@@ -2,8 +2,47 @@
 <html>
 <head>
   <title>My Roadmap App</title>
+  <style>
+    body {
+      font-family: Arial;
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+    }
+    .column {
+      flex: 1;
+      background: #f4f4f4;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    h2 {
+      text-align: center;
+    }
+    .card {
+      background: white;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello Roadmap</h1>
+
+  <div class="column">
+    <h2>Now</h2>
+    <div class="card">Improve UI</div>
+  </div>
+
+  <div class="column">
+    <h2>Next</h2>
+    <div class="card">Add drag & drop</div>
+  </div>
+
+  <div class="column">
+    <h2>Later</h2>
+    <div class="card">User accounts</div>
+  </div>
+
 </body>
 </html>
