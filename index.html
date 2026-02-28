@@ -1,73 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>My Roadmap App</title>
-  <style>
-    body { font-family: Arial; padding: 20px; }
-    h1 { margin-bottom: 6px; }
-    .muted { color: #666; font-size: 12px; margin-bottom: 14px; }
-
-    .panel {
-      background: #f7f7f7;
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 16px;
-    }
-
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    input, select, button { padding: 8px; font-size: 14px; }
-    button { cursor: pointer; }
-
-    .swimlane {
-      background: #f4f4f4;
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 16px;
-    }
-
-    .swimlaneHeader {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .swimlaneTitle {
-      font-weight: bold;
-      font-size: 16px;
-    }
-
-    .board { display: flex; gap: 12px; }
-    .column {
-      flex: 1;
-      background: #ffffff;
-      border-radius: 10px;
-      padding: 10px;
-      min-height: 120px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-
-    .column h3 { margin: 0 0 8px 0; text-align: center; }
-
-    .card {
-      background: white;
-      padding: 10px;
-      margin-bottom: 10px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.10);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .actions { display: flex; gap: 6px; align-items: center; }
-    .actions button { padding: 4px 8px; font-size: 12px; }
-    .actions select { padding: 4px 8px; font-size: 12px; }
-
-    .danger { background: #fff; border: 1px solid #ddd; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
@@ -76,326 +12,53 @@
 
   <div class="panel">
     <div class="row" style="margin-bottom: 10px;">
-      <input id="laneNameInput" type="text" placeholder="New swim lane name (e.g., Platform: D365)..." style="min-width: 340px;" />
-      <button id="addLaneBtn">Add swim lane</button>
-      <button id="clearAllBtn" class="danger" title="Clears lanes and cards">Clear ALL</button>
+      <label class="label">
+        Group by
+        <select id="groupBySelect">
+          <option value="platform">Platform</option>
+          <option value="theme">Theme</option>
+          <option value="team">Team</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+
+      <button id="exportBtn">Export JSON</button>
+      <label class="fileLabel">
+        Import JSON
+        <input id="importFile" type="file" accept="application/json" />
+      </label>
+
+      <button id="snapshotBtn" title="Save a point-in-time snapshot">Create Snapshot</button>
+      <button id="clearAllBtn" class="danger" title="Clears all cards and snapshots">Clear ALL</button>
     </div>
 
     <div class="row">
       <input id="cardTitleInput" type="text" placeholder="New card title..." style="min-width: 260px;" />
-      <select id="laneSelect"></select>
+
+      <input id="platformInput" type="text" placeholder="Platform (e.g., D365)" />
+      <input id="themeInput" type="text" placeholder="Theme (e.g., Resilience)" />
+      <input id="teamInput" type="text" placeholder="Team (e.g., DevOps)" />
+
       <select id="horizonSelect">
         <option value="now">Now</option>
         <option value="next">Next</option>
         <option value="later">Later</option>
       </select>
+
       <button id="addCardBtn">Add card</button>
+    </div>
+
+    <div class="row" style="margin-top: 10px;">
+      <label class="label">
+        Show snapshot
+        <select id="snapshotSelect"></select>
+      </label>
+      <span class="hint">Snapshots show a read-only overlay (later we can add variance indicators).</span>
     </div>
   </div>
 
   <div id="lanesContainer"></div>
 
-  <script>
-    const STORAGE_KEY = "roadmap_swimlanes_v1";
-
-    function loadState() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null;
-      } catch {
-        return null;
-      }
-    }
-
-    function saveState(state) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-
-    // State model:
-    // state = { lanes: [{id,name}], cards: [{id, title, laneId, horizon}] }
-    let state = loadState() || {
-      lanes: [
-        { id: genId(), name: "Platform: D365" },
-        { id: genId(), name: "Platform: Pega" }
-      ],
-      cards: [
-        { id: genId(), title: "Stabilise incident response", laneId: null, horizon: "now" }
-      ]
-    };
-
-    // Ensure sample card has a lane
-    if (state.cards.length && state.cards[0].laneId === null && state.lanes.length) {
-      state.cards[0].laneId = state.lanes[0].id;
-      saveState(state);
-    }
-
-    function genId() {
-      return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
-    }
-
-    function horizonLabel(h) {
-      if (h === "now") return "Now";
-      if (h === "next") return "Next";
-      return "Later";
-    }
-
-    function renderLaneDropdown() {
-      const laneSelect = document.getElementById("laneSelect");
-      laneSelect.innerHTML = "";
-
-      if (state.lanes.length === 0) {
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "No swim lanes yet";
-        laneSelect.appendChild(opt);
-        laneSelect.disabled = true;
-      } else {
-        laneSelect.disabled = false;
-        for (const lane of state.lanes) {
-          const opt = document.createElement("option");
-          opt.value = lane.id;
-          opt.textContent = lane.name;
-          laneSelect.appendChild(opt);
-        }
-      }
-    }
-
-    function render() {
-      renderLaneDropdown();
-
-      const container = document.getElementById("lanesContainer");
-      container.innerHTML = "";
-
-      for (const lane of state.lanes) {
-        const laneWrap = document.createElement("div");
-        laneWrap.className = "swimlane";
-
-        // Header
-        const header = document.createElement("div");
-        header.className = "swimlaneHeader";
-
-        const title = document.createElement("div");
-        title.className = "swimlaneTitle";
-        title.textContent = lane.name;
-
-        const headerActions = document.createElement("div");
-        headerActions.className = "actions";
-
-        const renameBtn = document.createElement("button");
-        renameBtn.textContent = "Rename";
-        renameBtn.onclick = () => renameLane(lane.id);
-
-        const delLaneBtn = document.createElement("button");
-        delLaneBtn.textContent = "Delete lane";
-        delLaneBtn.onclick = () => deleteLane(lane.id);
-
-        headerActions.appendChild(renameBtn);
-        headerActions.appendChild(delLaneBtn);
-
-        header.appendChild(title);
-        header.appendChild(headerActions);
-
-        // Board
-        const board = document.createElement("div");
-        board.className = "board";
-
-        board.appendChild(renderColumn(lane.id, "now"));
-        board.appendChild(renderColumn(lane.id, "next"));
-        board.appendChild(renderColumn(lane.id, "later"));
-
-        laneWrap.appendChild(header);
-        laneWrap.appendChild(board);
-        container.appendChild(laneWrap);
-      }
-    }
-
-    function renderColumn(laneId, horizon) {
-      const col = document.createElement("div");
-      col.className = "column";
-
-      const h = document.createElement("h3");
-      h.textContent = horizonLabel(horizon);
-      col.appendChild(h);
-
-      const cardsHere = state.cards.filter(c => c.laneId === laneId && c.horizon === horizon);
-
-      for (const card of cardsHere) {
-        col.appendChild(renderCard(card));
-      }
-
-      return col;
-    }
-
-    function renderCard(card) {
-      const el = document.createElement("div");
-      el.className = "card";
-
-      const title = document.createElement("div");
-      title.textContent = card.title;
-
-      const actions = document.createElement("div");
-      actions.className = "actions";
-
-      // Move horizon dropdown
-      const moveH = document.createElement("select");
-      for (const h of ["now","next","later"]) {
-        const opt = document.createElement("option");
-        opt.value = h;
-        opt.textContent = `Move: ${horizonLabel(h)}`;
-        if (card.horizon === h) opt.selected = true;
-        moveH.appendChild(opt);
-      }
-      moveH.onchange = (e) => {
-        card.horizon = e.target.value;
-        saveState(state);
-        render();
-      };
-
-      // Move lane dropdown (optional but very handy)
-      const moveLane = document.createElement("select");
-      for (const lane of state.lanes) {
-        const opt = document.createElement("option");
-        opt.value = lane.id;
-        opt.textContent = `Lane: ${lane.name}`;
-        if (card.laneId === lane.id) opt.selected = true;
-        moveLane.appendChild(opt);
-      }
-      moveLane.onchange = (e) => {
-        card.laneId = e.target.value;
-        saveState(state);
-        render();
-      };
-
-      const editBtn = document.createElement("button");
-      editBtn.textContent = "Edit";
-      editBtn.onclick = () => editCard(card.id);
-
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "Delete";
-      delBtn.onclick = () => deleteCard(card.id);
-
-      actions.appendChild(moveH);
-      actions.appendChild(moveLane);
-      actions.appendChild(editBtn);
-      actions.appendChild(delBtn);
-
-      el.appendChild(title);
-      el.appendChild(actions);
-
-      return el;
-    }
-
-    // Actions: lanes
-    function addLane() {
-      const input = document.getElementById("laneNameInput");
-      const name = input.value.trim();
-      if (!name) return;
-
-      state.lanes.push({ id: genId(), name });
-      saveState(state);
-      render();
-
-      input.value = "";
-      input.focus();
-    }
-
-    function renameLane(laneId) {
-      const lane = state.lanes.find(l => l.id === laneId);
-      if (!lane) return;
-
-      const updated = prompt("Rename swim lane:", lane.name);
-      if (updated === null) return;
-      const trimmed = updated.trim();
-      if (!trimmed) return;
-
-      lane.name = trimmed;
-      saveState(state);
-      render();
-    }
-
-    function deleteLane(laneId) {
-      const lane = state.lanes.find(l => l.id === laneId);
-      if (!lane) return;
-
-      const ok = confirm(`Delete swim lane "${lane.name}" and all its cards?`);
-      if (!ok) return;
-
-      state.lanes = state.lanes.filter(l => l.id !== laneId);
-      state.cards = state.cards.filter(c => c.laneId !== laneId);
-
-      saveState(state);
-      render();
-    }
-
-    // Actions: cards
-    function addCard() {
-      const titleInput = document.getElementById("cardTitleInput");
-      const laneSelect = document.getElementById("laneSelect");
-      const horizonSelect = document.getElementById("horizonSelect");
-
-      const title = titleInput.value.trim();
-      if (!title) return;
-
-      if (state.lanes.length === 0) {
-        alert("Add a swim lane first.");
-        return;
-      }
-
-      const newCard = {
-        id: genId(),
-        title,
-        laneId: laneSelect.value,
-        horizon: horizonSelect.value
-      };
-
-      state.cards.push(newCard);
-      saveState(state);
-      render();
-
-      titleInput.value = "";
-      titleInput.focus();
-    }
-
-    function editCard(cardId) {
-      const card = state.cards.find(c => c.id === cardId);
-      if (!card) return;
-
-      const updated = prompt("Edit card title:", card.title);
-      if (updated === null) return;
-      const trimmed = updated.trim();
-      if (!trimmed) return;
-
-      card.title = trimmed;
-      saveState(state);
-      render();
-    }
-
-    function deleteCard(cardId) {
-      state.cards = state.cards.filter(c => c.id !== cardId);
-      saveState(state);
-      render();
-    }
-
-    function clearAll() {
-      if (!confirm("Clear ALL lanes and cards?")) return;
-      state = { lanes: [], cards: [] };
-      saveState(state);
-      render();
-    }
-
-    // Wire up UI
-    document.getElementById("addLaneBtn").onclick = addLane;
-    document.getElementById("addCardBtn").onclick = addCard;
-    document.getElementById("clearAllBtn").onclick = clearAll;
-
-    document.getElementById("laneNameInput").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") addLane();
-    });
-
-    document.getElementById("cardTitleInput").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") addCard();
-    });
-
-    render();
-  </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

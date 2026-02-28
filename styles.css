@@ -1,0 +1,82 @@
+body { font-family: Arial; padding: 20px; }
+h1 { margin-bottom: 6px; }
+.muted { color: #666; font-size: 12px; margin-bottom: 14px; }
+
+.panel {
+  background: #f7f7f7;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+input, select, button { padding: 8px; font-size: 14px; }
+button { cursor: pointer; }
+
+.label { display: flex; gap: 6px; align-items: center; }
+.hint { color: #666; font-size: 12px; }
+
+.fileLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+}
+.fileLabel input { display: none; }
+
+.swimlane {
+  background: #f4f4f4;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.swimlaneHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.swimlaneTitle { font-weight: bold; font-size: 16px; }
+
+.board { display: flex; gap: 12px; }
+.column {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 120px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  border: 1px dashed transparent;
+}
+
+.column h3 { margin: 0 0 8px 0; text-align: center; }
+
+.card {
+  background: white;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.10);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.card[draggable="true"] { cursor: grab; }
+.card.dragging { opacity: 0.6; }
+.column.dropTarget { border-color: #aaa; background: #fafafa; }
+
+.meta { font-size: 12px; color: #666; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.actions { display: flex; gap: 6px; align-items: center; }
+.actions button { padding: 4px 8px; font-size: 12px; }
+
+.danger { background: #fff; border: 1px solid #ddd; }
