@@ -4,15 +4,69 @@
   <title>My Roadmap App</title>
   <style>
     body { font-family: Arial; padding: 20px; }
-    .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+    h1 { margin-bottom: 6px; }
+    .muted { color: #666; font-size: 12px; margin-bottom: 14px; }
+
+    .panel {
+      background: #f7f7f7;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     input, select, button { padding: 8px; font-size: 14px; }
-    .board { display: flex; gap: 20px; }
-    .column { flex: 1; background: #f4f4f4; padding: 15px; border-radius: 8px; }
-    h2 { text-align: center; margin-top: 0; }
-    .card { background: white; padding: 10px; margin-bottom: 10px; border-radius: 6px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; gap: 10px; }
-    .card button { padding: 4px 8px; font-size: 12px; }
-    .muted { color: #666; font-size: 12px; }
+    button { cursor: pointer; }
+
+    .swimlane {
+      background: #f4f4f4;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .swimlaneHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .swimlaneTitle {
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .board { display: flex; gap: 12px; }
+    .column {
+      flex: 1;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 120px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .column h3 { margin: 0 0 8px 0; text-align: center; }
+
+    .card {
+      background: white;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.10);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .actions { display: flex; gap: 6px; align-items: center; }
+    .actions button { padding: 4px 8px; font-size: 12px; }
+    .actions select { padding: 4px 8px; font-size: 12px; }
+
+    .danger { background: #fff; border: 1px solid #ddd; }
   </style>
 </head>
 
@@ -20,127 +74,327 @@
   <h1>Roadmap</h1>
   <div class="muted">Now = weeks to months • Next = months to a year • Later = year+</div>
 
-  <div class="controls">
-    <input id="titleInput" type="text" placeholder="New card title..." />
-    <select id="laneSelect">
-      <option value="now">Now</option>
-      <option value="next">Next</option>
-      <option value="later">Later</option>
-    </select>
-    <button id="addBtn">Add</button>
-    <button id="clearBtn" title="Clears all cards">Clear all</button>
-  </div>
-
-  <div class="board">
-    <div class="column">
-      <h2>Now</h2>
-      <div id="nowList"></div>
+  <div class="panel">
+    <div class="row" style="margin-bottom: 10px;">
+      <input id="laneNameInput" type="text" placeholder="New swim lane name (e.g., Platform: D365)..." style="min-width: 340px;" />
+      <button id="addLaneBtn">Add swim lane</button>
+      <button id="clearAllBtn" class="danger" title="Clears lanes and cards">Clear ALL</button>
     </div>
 
-    <div class="column">
-      <h2>Next</h2>
-      <div id="nextList"></div>
-    </div>
-
-    <div class="column">
-      <h2>Later</h2>
-      <div id="laterList"></div>
+    <div class="row">
+      <input id="cardTitleInput" type="text" placeholder="New card title..." style="min-width: 260px;" />
+      <select id="laneSelect"></select>
+      <select id="horizonSelect">
+        <option value="now">Now</option>
+        <option value="next">Next</option>
+        <option value="later">Later</option>
+      </select>
+      <button id="addCardBtn">Add card</button>
     </div>
   </div>
+
+  <div id="lanesContainer"></div>
 
   <script>
-    // ---- Storage helpers (keeps your cards after refresh) ----
-    const STORAGE_KEY = "roadmap_cards_v1";
+    const STORAGE_KEY = "roadmap_swimlanes_v1";
 
-    function loadCards() {
+    function loadState() {
       try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null;
       } catch {
-        return [];
+        return null;
       }
     }
 
-    function saveCards(cards) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    function saveState(state) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
 
-    // ---- App state ----
-    let cards = loadCards();
+    // State model:
+    // state = { lanes: [{id,name}], cards: [{id, title, laneId, horizon}] }
+    let state = loadState() || {
+      lanes: [
+        { id: genId(), name: "Platform: D365" },
+        { id: genId(), name: "Platform: Pega" }
+      ],
+      cards: [
+        { id: genId(), title: "Stabilise incident response", laneId: null, horizon: "now" }
+      ]
+    };
 
-    // ---- Rendering ----
+    // Ensure sample card has a lane
+    if (state.cards.length && state.cards[0].laneId === null && state.lanes.length) {
+      state.cards[0].laneId = state.lanes[0].id;
+      saveState(state);
+    }
+
+    function genId() {
+      return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+    }
+
+    function horizonLabel(h) {
+      if (h === "now") return "Now";
+      if (h === "next") return "Next";
+      return "Later";
+    }
+
+    function renderLaneDropdown() {
+      const laneSelect = document.getElementById("laneSelect");
+      laneSelect.innerHTML = "";
+
+      if (state.lanes.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No swim lanes yet";
+        laneSelect.appendChild(opt);
+        laneSelect.disabled = true;
+      } else {
+        laneSelect.disabled = false;
+        for (const lane of state.lanes) {
+          const opt = document.createElement("option");
+          opt.value = lane.id;
+          opt.textContent = lane.name;
+          laneSelect.appendChild(opt);
+        }
+      }
+    }
+
     function render() {
-      const nowList = document.getElementById("nowList");
-      const nextList = document.getElementById("nextList");
-      const laterList = document.getElementById("laterList");
+      renderLaneDropdown();
 
-      nowList.innerHTML = "";
-      nextList.innerHTML = "";
-      laterList.innerHTML = "";
+      const container = document.getElementById("lanesContainer");
+      container.innerHTML = "";
 
-      for (const card of cards) {
-        const el = document.createElement("div");
-        el.className = "card";
+      for (const lane of state.lanes) {
+        const laneWrap = document.createElement("div");
+        laneWrap.className = "swimlane";
+
+        // Header
+        const header = document.createElement("div");
+        header.className = "swimlaneHeader";
 
         const title = document.createElement("div");
-        title.textContent = card.title;
+        title.className = "swimlaneTitle";
+        title.textContent = lane.name;
 
-        const del = document.createElement("button");
-        del.textContent = "Delete";
-        del.onclick = () => deleteCard(card.id);
+        const headerActions = document.createElement("div");
+        headerActions.className = "actions";
 
-        el.appendChild(title);
-        el.appendChild(del);
+        const renameBtn = document.createElement("button");
+        renameBtn.textContent = "Rename";
+        renameBtn.onclick = () => renameLane(lane.id);
 
-        if (card.lane === "now") nowList.appendChild(el);
-        if (card.lane === "next") nextList.appendChild(el);
-        if (card.lane === "later") laterList.appendChild(el);
+        const delLaneBtn = document.createElement("button");
+        delLaneBtn.textContent = "Delete lane";
+        delLaneBtn.onclick = () => deleteLane(lane.id);
+
+        headerActions.appendChild(renameBtn);
+        headerActions.appendChild(delLaneBtn);
+
+        header.appendChild(title);
+        header.appendChild(headerActions);
+
+        // Board
+        const board = document.createElement("div");
+        board.className = "board";
+
+        board.appendChild(renderColumn(lane.id, "now"));
+        board.appendChild(renderColumn(lane.id, "next"));
+        board.appendChild(renderColumn(lane.id, "later"));
+
+        laneWrap.appendChild(header);
+        laneWrap.appendChild(board);
+        container.appendChild(laneWrap);
       }
     }
 
-    // ---- Actions ----
-    function addCard() {
-      const input = document.getElementById("titleInput");
-      const lane = document.getElementById("laneSelect").value;
+    function renderColumn(laneId, horizon) {
+      const col = document.createElement("div");
+      col.className = "column";
 
-      const title = input.value.trim();
-      if (!title) return;
+      const h = document.createElement("h3");
+      h.textContent = horizonLabel(horizon);
+      col.appendChild(h);
 
-      const newCard = {
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        title,
-        lane
+      const cardsHere = state.cards.filter(c => c.laneId === laneId && c.horizon === horizon);
+
+      for (const card of cardsHere) {
+        col.appendChild(renderCard(card));
+      }
+
+      return col;
+    }
+
+    function renderCard(card) {
+      const el = document.createElement("div");
+      el.className = "card";
+
+      const title = document.createElement("div");
+      title.textContent = card.title;
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      // Move horizon dropdown
+      const moveH = document.createElement("select");
+      for (const h of ["now","next","later"]) {
+        const opt = document.createElement("option");
+        opt.value = h;
+        opt.textContent = `Move: ${horizonLabel(h)}`;
+        if (card.horizon === h) opt.selected = true;
+        moveH.appendChild(opt);
+      }
+      moveH.onchange = (e) => {
+        card.horizon = e.target.value;
+        saveState(state);
+        render();
       };
 
-      cards.push(newCard);
-      saveCards(cards);
+      // Move lane dropdown (optional but very handy)
+      const moveLane = document.createElement("select");
+      for (const lane of state.lanes) {
+        const opt = document.createElement("option");
+        opt.value = lane.id;
+        opt.textContent = `Lane: ${lane.name}`;
+        if (card.laneId === lane.id) opt.selected = true;
+        moveLane.appendChild(opt);
+      }
+      moveLane.onchange = (e) => {
+        card.laneId = e.target.value;
+        saveState(state);
+        render();
+      };
+
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "Edit";
+      editBtn.onclick = () => editCard(card.id);
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "Delete";
+      delBtn.onclick = () => deleteCard(card.id);
+
+      actions.appendChild(moveH);
+      actions.appendChild(moveLane);
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      el.appendChild(title);
+      el.appendChild(actions);
+
+      return el;
+    }
+
+    // Actions: lanes
+    function addLane() {
+      const input = document.getElementById("laneNameInput");
+      const name = input.value.trim();
+      if (!name) return;
+
+      state.lanes.push({ id: genId(), name });
+      saveState(state);
       render();
 
       input.value = "";
       input.focus();
     }
 
-    function deleteCard(id) {
-      cards = cards.filter(c => c.id !== id);
-      saveCards(cards);
+    function renameLane(laneId) {
+      const lane = state.lanes.find(l => l.id === laneId);
+      if (!lane) return;
+
+      const updated = prompt("Rename swim lane:", lane.name);
+      if (updated === null) return;
+      const trimmed = updated.trim();
+      if (!trimmed) return;
+
+      lane.name = trimmed;
+      saveState(state);
+      render();
+    }
+
+    function deleteLane(laneId) {
+      const lane = state.lanes.find(l => l.id === laneId);
+      if (!lane) return;
+
+      const ok = confirm(`Delete swim lane "${lane.name}" and all its cards?`);
+      if (!ok) return;
+
+      state.lanes = state.lanes.filter(l => l.id !== laneId);
+      state.cards = state.cards.filter(c => c.laneId !== laneId);
+
+      saveState(state);
+      render();
+    }
+
+    // Actions: cards
+    function addCard() {
+      const titleInput = document.getElementById("cardTitleInput");
+      const laneSelect = document.getElementById("laneSelect");
+      const horizonSelect = document.getElementById("horizonSelect");
+
+      const title = titleInput.value.trim();
+      if (!title) return;
+
+      if (state.lanes.length === 0) {
+        alert("Add a swim lane first.");
+        return;
+      }
+
+      const newCard = {
+        id: genId(),
+        title,
+        laneId: laneSelect.value,
+        horizon: horizonSelect.value
+      };
+
+      state.cards.push(newCard);
+      saveState(state);
+      render();
+
+      titleInput.value = "";
+      titleInput.focus();
+    }
+
+    function editCard(cardId) {
+      const card = state.cards.find(c => c.id === cardId);
+      if (!card) return;
+
+      const updated = prompt("Edit card title:", card.title);
+      if (updated === null) return;
+      const trimmed = updated.trim();
+      if (!trimmed) return;
+
+      card.title = trimmed;
+      saveState(state);
+      render();
+    }
+
+    function deleteCard(cardId) {
+      state.cards = state.cards.filter(c => c.id !== cardId);
+      saveState(state);
       render();
     }
 
     function clearAll() {
-      if (!confirm("Clear all cards?")) return;
-      cards = [];
-      saveCards(cards);
+      if (!confirm("Clear ALL lanes and cards?")) return;
+      state = { lanes: [], cards: [] };
+      saveState(state);
       render();
     }
 
-    // ---- Wire up buttons ----
-    document.getElementById("addBtn").onclick = addCard;
-    document.getElementById("clearBtn").onclick = clearAll;
+    // Wire up UI
+    document.getElementById("addLaneBtn").onclick = addLane;
+    document.getElementById("addCardBtn").onclick = addCard;
+    document.getElementById("clearAllBtn").onclick = clearAll;
 
-    document.getElementById("titleInput").addEventListener("keydown", (e) => {
+    document.getElementById("laneNameInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addLane();
+    });
+
+    document.getElementById("cardTitleInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") addCard();
     });
 
-    // First paint
     render();
   </script>
 </body>
