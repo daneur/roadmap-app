@@ -3,46 +3,145 @@
 <head>
   <title>My Roadmap App</title>
   <style>
-    body {
-      font-family: Arial;
-      display: flex;
-      gap: 20px;
-      padding: 20px;
-    }
-    .column {
-      flex: 1;
-      background: #f4f4f4;
-      padding: 15px;
-      border-radius: 8px;
-    }
-    h2 {
-      text-align: center;
-    }
-    .card {
-      background: white;
-      padding: 10px;
-      margin-bottom: 10px;
-      border-radius: 6px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
+    body { font-family: Arial; padding: 20px; }
+    .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+    input, select, button { padding: 8px; font-size: 14px; }
+    .board { display: flex; gap: 20px; }
+    .column { flex: 1; background: #f4f4f4; padding: 15px; border-radius: 8px; }
+    h2 { text-align: center; margin-top: 0; }
+    .card { background: white; padding: 10px; margin-bottom: 10px; border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; gap: 10px; }
+    .card button { padding: 4px 8px; font-size: 12px; }
+    .muted { color: #666; font-size: 12px; }
   </style>
 </head>
+
 <body>
+  <h1>Roadmap</h1>
+  <div class="muted">Now = weeks to months • Next = months to a year • Later = year+</div>
 
-  <div class="column">
-    <h2>Now</h2>
-    <div class="card">Improve UI</div>
+  <div class="controls">
+    <input id="titleInput" type="text" placeholder="New card title..." />
+    <select id="laneSelect">
+      <option value="now">Now</option>
+      <option value="next">Next</option>
+      <option value="later">Later</option>
+    </select>
+    <button id="addBtn">Add</button>
+    <button id="clearBtn" title="Clears all cards">Clear all</button>
   </div>
 
-  <div class="column">
-    <h2>Next</h2>
-    <div class="card">Add drag & drop</div>
+  <div class="board">
+    <div class="column">
+      <h2>Now</h2>
+      <div id="nowList"></div>
+    </div>
+
+    <div class="column">
+      <h2>Next</h2>
+      <div id="nextList"></div>
+    </div>
+
+    <div class="column">
+      <h2>Later</h2>
+      <div id="laterList"></div>
+    </div>
   </div>
 
-  <div class="column">
-    <h2>Later</h2>
-    <div class="card">User accounts</div>
-  </div>
+  <script>
+    // ---- Storage helpers (keeps your cards after refresh) ----
+    const STORAGE_KEY = "roadmap_cards_v1";
 
+    function loadCards() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveCards(cards) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    }
+
+    // ---- App state ----
+    let cards = loadCards();
+
+    // ---- Rendering ----
+    function render() {
+      const nowList = document.getElementById("nowList");
+      const nextList = document.getElementById("nextList");
+      const laterList = document.getElementById("laterList");
+
+      nowList.innerHTML = "";
+      nextList.innerHTML = "";
+      laterList.innerHTML = "";
+
+      for (const card of cards) {
+        const el = document.createElement("div");
+        el.className = "card";
+
+        const title = document.createElement("div");
+        title.textContent = card.title;
+
+        const del = document.createElement("button");
+        del.textContent = "Delete";
+        del.onclick = () => deleteCard(card.id);
+
+        el.appendChild(title);
+        el.appendChild(del);
+
+        if (card.lane === "now") nowList.appendChild(el);
+        if (card.lane === "next") nextList.appendChild(el);
+        if (card.lane === "later") laterList.appendChild(el);
+      }
+    }
+
+    // ---- Actions ----
+    function addCard() {
+      const input = document.getElementById("titleInput");
+      const lane = document.getElementById("laneSelect").value;
+
+      const title = input.value.trim();
+      if (!title) return;
+
+      const newCard = {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        title,
+        lane
+      };
+
+      cards.push(newCard);
+      saveCards(cards);
+      render();
+
+      input.value = "";
+      input.focus();
+    }
+
+    function deleteCard(id) {
+      cards = cards.filter(c => c.id !== id);
+      saveCards(cards);
+      render();
+    }
+
+    function clearAll() {
+      if (!confirm("Clear all cards?")) return;
+      cards = [];
+      saveCards(cards);
+      render();
+    }
+
+    // ---- Wire up buttons ----
+    document.getElementById("addBtn").onclick = addCard;
+    document.getElementById("clearBtn").onclick = clearAll;
+
+    document.getElementById("titleInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addCard();
+    });
+
+    // First paint
+    render();
+  </script>
 </body>
 </html>
