@@ -1,3 +1,4 @@
+import { drawDependencyGraph } from "./depGraph.js";
 import { genId } from "./model.js";
 import { loadState, saveState, exportJSON, importJSON } from "./storage.js";
 import { renderBoard } from "./board.js";
@@ -11,6 +12,8 @@ if (!state.ui) state.ui = { linkMode: false, linkSourceId: null };
 const els = {
   lanesContainer: document.getElementById("lanesContainer"),
   linkModeBanner: document.getElementById("linkModeBanner"),
+  boardWrap: document.getElementById("boardWrap"),
+  depSvg: document.getElementById("depSvg"), 
   groupBySelect: document.getElementById("groupBySelect"),
   cardTitleInput: document.getElementById("cardTitleInput"),
   platformInput: document.getElementById("platformInput"),
@@ -85,6 +88,9 @@ function render() {
   renderSnapshotDropdown();
   renderLinkBanner();
   renderBoard(state, els.lanesContainer);
+
+  // draw arrows after DOM cards exist
+  drawDependencyGraph({ state, svgEl: els.depSvg, containerEl: els.boardWrap });
 }
 
 // Expose actions for board.js
@@ -275,3 +281,11 @@ wireDnD(() => state, (s) => setState(s));
 
 // Initial render
 render();
+function redrawDeps() {
+  drawDependencyGraph({ state, svgEl: els.depSvg, containerEl: els.boardWrap });
+}
+
+window.addEventListener("resize", () => redrawDeps(), { passive: true });
+window.addEventListener("scroll", () => redrawDeps(), { passive: true });
+
+// If you scroll inside the page and the board moves, this keeps arrows aligned.
