@@ -2,22 +2,34 @@ import { STORAGE_KEY, makeDefaultState, migrateFromV1IfNeeded } from "./model.js
 
 const OLD_KEY = "roadmap_swimlanes_v1";
 
+function normalizeState(data) {
+  if (!data || typeof data !== "object") return null;
+  if (!Array.isArray(data.cards)) return null;
+  if (!Array.isArray(data.snapshots)) data.snapshots = [];
+  if (!Array.isArray(data.deps)) data.deps = [];
+  if (!data.groupBy) data.groupBy = "platform";
+  data.version = 2;
+  return data;
+}
+
 export function loadState() {
-  // v2 first
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = normalizeState(JSON.parse(raw));
+      if (parsed) return parsed;
+    }
   } catch {}
 
-  // try migrating v1
   try {
     const rawV1 = localStorage.getItem(OLD_KEY);
     if (rawV1) {
       const v1 = JSON.parse(rawV1);
       const migrated = migrateFromV1IfNeeded(v1);
-      if (migrated) {
-        saveState(migrated);
-        return migrated;
+      const normalized = normalizeState(migrated);
+      if (normalized) {
+        saveState(normalized);
+        return normalized;
       }
     }
   } catch {}
@@ -46,9 +58,9 @@ export function importJSON(file, onLoaded) {
   reader.onload = () => {
     try {
       const data = JSON.parse(String(reader.result || ""));
-      onLoaded(data);
-    } catch (e) {
-      alert("Invalid JSON file.");
+      onLoaded(normalizeState(data));
+    } catch {
+      onLoaded(null);
     }
   };
   reader.readAsText(file);

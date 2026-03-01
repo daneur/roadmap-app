@@ -1,4 +1,4 @@
-import { horizonLabel, getLaneValue } from "./model.js";
+import { horizonLabel, getLaneValue, buildDepIndex, blockingMisalignment } from "./model.js";
 
 export function renderBoard(state, containerEl) {
   containerEl.innerHTML = "";
@@ -6,7 +6,9 @@ export function renderBoard(state, containerEl) {
   const groupBy = state.groupBy || "platform";
   const horizons = ["now", "next", "later"];
 
-  // Build lanes dynamically from current cards
+  const { blocksOut, blocksIn } = buildDepIndex(state);
+  const cardById = new Map(state.cards.map(c => [c.id, c]));
+
   const laneSet = new Set(state.cards.map(c => getLaneValue(c, groupBy)));
   if (laneSet.size === 0) laneSet.add("Unspecified");
   const lanes = Array.from(laneSet).sort((a,b) => a.localeCompare(b));
@@ -29,7 +31,7 @@ export function renderBoard(state, containerEl) {
     board.className = "board";
 
     for (const h of horizons) {
-      board.appendChild(renderColumn(state, groupBy, lane, h));
+      board.appendChild(renderColumn(state, groupBy, lane, h, blocksOut, blocksIn, cardById));
     }
 
     laneWrap.appendChild(board);
@@ -37,7 +39,7 @@ export function renderBoard(state, containerEl) {
   }
 }
 
-function renderColumn(state, groupBy, lane, horizon) {
+function renderColumn(state, groupBy, lane, horizon, blocksOut, blocksIn, cardById) {
   const col = document.createElement("div");
   col.className = "column";
   col.dataset.horizon = horizon;
@@ -53,17 +55,29 @@ function renderColumn(state, groupBy, lane, horizon) {
     .sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
 
   for (const card of cardsHere) {
-    col.appendChild(renderCard(card));
+    col.appendChild(renderCard(card, state, blocksOut, blocksIn, cardById));
   }
 
   return col;
 }
 
-function renderCard(card) {
+function renderCard(card, state, blocksOut, blocksIn, cardById) {
   const el = document.createElement("div");
   el.className = "card";
   el.draggable = true;
   el.dataset.cardId = card.id;
+
+  if (state.ui?.linkMode && state.ui?.linkSourceId === card.id) {
+    el.classList.add("linkSource");
+  }
+
+  // click behaviour (used for link mode)
+  el.addEventListener("click", (e) => {
+    // avoid clicks on action buttons
+    const btn = e.target.closest?.("button");
+    if (btn) return;
+    window.appActions.onCardClicked(card.id);
+  });
 
   const left = document.createElement("div");
   const title = document.createElement("div");
@@ -79,8 +93,53 @@ function renderCard(card) {
   `;
   left.appendChild(meta);
 
+  // Dependency badges
+  const out = blocksOut.get(card.id) ?? [];
+  const inn = blocksIn.get(card.id) ?? [];
+
+  // Determine worst warning based on "blocks" only
+  let worst = null; // null | "risk" | "severe"
+  for (const d of out) {
+    if (d.kind !== "blocks") continue;
+    const blocked = cardById.get(d.toId);
+    if (!blocked) continue;
+    const w = blockingMisalignment(card.horizon, blocked.horizon);
+    if (w === "severe") worst = "severe";
+    else if (w === "risk" && worst !== "severe") worst = "risk";
+  }
+
+  const badges = document.createElement("div");
+  badges.className = "badges";
+
+  const b1 = document.createElement("span");
+  b1.className = "badge";
+  b1.textContent = `Blocks: ${out.length}`;
+  badges.appendChild(b1);
+
+  const b2 = document.createElement("span");
+  b2.className = "badge";
+  b2.textContent = `Blocked by: ${inn.length}`;
+  badges.appendChild(b2);
+
+  if (worst) {
+    const bw = document.createElement("span");
+    bw.className = `badge ${worst === "severe" ? "badgeSevere" : "badgeRisk"}`;
+    bw.textContent = worst === "severe" ? "Dependency misaligned 🔴" : "Dependency at risk 🟠";
+    badges.appendChild(bw);
+  }
+
+  left.appendChild(badges);
+
   const actions = document.createElement("div");
   actions.className = "actions";
+
+  const linkBtn = document.createElement("button");
+  linkBtn.textContent = "Link";
+  linkBtn.onclick = () => window.appActions.startLinkFrom(card.id);
+
+  const manageBtn = document.createElement("button");
+  manageBtn.textContent = "Deps";
+  manageBtn.onclick = () => window.appActions.manageDeps(card.id);
 
   const editBtn = document.createElement("button");
   editBtn.textContent = "Edit";
@@ -90,6 +149,8 @@ function renderCard(card) {
   delBtn.textContent = "Delete";
   delBtn.onclick = () => window.appActions.deleteCard(card.id);
 
+  actions.appendChild(linkBtn);
+  actions.appendChild(manageBtn);
   actions.appendChild(editBtn);
   actions.appendChild(delBtn);
 

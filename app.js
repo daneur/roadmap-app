@@ -5,8 +5,12 @@ import { wireDnD } from "./dnd.js";
 
 let state = loadState();
 
+// UI state container (kept inside state so it persists safely across renders; not exported to snapshots)
+if (!state.ui) state.ui = { linkMode: false, linkSourceId: null };
+
 const els = {
   lanesContainer: document.getElementById("lanesContainer"),
+  linkModeBanner: document.getElementById("linkModeBanner"),
   groupBySelect: document.getElementById("groupBySelect"),
   cardTitleInput: document.getElementById("cardTitleInput"),
   platformInput: document.getElementById("platformInput"),
@@ -27,15 +31,36 @@ function setState(next) {
   render();
 }
 
-function render() {
-  // groupBy select
-  els.groupBySelect.value = state.groupBy || "platform";
+function renderLinkBanner() {
+  const b = els.linkModeBanner;
+  b.innerHTML = "";
 
-  // snapshot dropdown
-  renderSnapshotDropdown();
+  if (!state.ui?.linkMode) return;
 
-  // render current board (or snapshot overlay later)
-  renderBoard(state, els.lanesContainer);
+  const src = state.cards.find(c => c.id === state.ui.linkSourceId);
+  const wrap = document.createElement("div");
+  wrap.className = "linkModeBanner";
+
+  const left = document.createElement("div");
+  left.innerHTML = `<strong>Link mode:</strong> Click a card to mark it as <em>blocked by</em> “${src?.title ?? "?"}”.`;
+
+  const right = document.createElement("div");
+  right.style.display = "flex";
+  right.style.gap = "8px";
+
+  const cancel = document.createElement("button");
+  cancel.textContent = "Cancel";
+  cancel.onclick = () => {
+    state.ui.linkMode = false;
+    state.ui.linkSourceId = null;
+    setState(state);
+  };
+
+  right.appendChild(cancel);
+  wrap.appendChild(left);
+  wrap.appendChild(right);
+
+  b.appendChild(wrap);
 }
 
 function renderSnapshotDropdown() {
@@ -55,8 +80,79 @@ function renderSnapshotDropdown() {
   }
 }
 
-// Expose actions for board.js to call
+function render() {
+  els.groupBySelect.value = state.groupBy || "platform";
+  renderSnapshotDropdown();
+  renderLinkBanner();
+  renderBoard(state, els.lanesContainer);
+}
+
+// Expose actions for board.js
 window.appActions = {
+  onCardClicked(cardId) {
+    // Link mode: clicking a target creates a dependency
+    if (state.ui?.linkMode && state.ui?.linkSourceId) {
+      const fromId = state.ui.linkSourceId;
+      const toId = cardId;
+      if (fromId === toId) return;
+
+      const exists = (state.deps ?? []).some(d => d.fromId === fromId && d.toId === toId && d.kind === "blocks");
+      if (!exists) {
+        state.deps.push({ id: genId(), fromId, toId, kind: "blocks" });
+      }
+
+      // exit link mode
+      state.ui.linkMode = false;
+      state.ui.linkSourceId = null;
+      setState(state);
+    }
+  },
+
+  startLinkFrom(cardId) {
+    state.ui.linkMode = true;
+    state.ui.linkSourceId = cardId;
+    setState(state);
+  },
+
+  manageDeps(cardId) {
+    const outgoing = (state.deps ?? []).filter(d => d.fromId === cardId);
+    const incoming = (state.deps ?? []).filter(d => d.toId === cardId);
+
+    const card = state.cards.find(c => c.id === cardId);
+    const name = card?.title ?? "Card";
+
+    let msg = `Dependencies for:\n"${name}"\n\n`;
+
+    msg += `Blocks:\n`;
+    if (outgoing.length === 0) msg += `  (none)\n`;
+    for (const d of outgoing) {
+      const t = state.cards.find(c => c.id === d.toId)?.title ?? "(missing)";
+      msg += `  - ${t} [${d.id}]\n`;
+    }
+
+    msg += `\nBlocked by:\n`;
+    if (incoming.length === 0) msg += `  (none)\n`;
+    for (const d of incoming) {
+      const s = state.cards.find(c => c.id === d.fromId)?.title ?? "(missing)";
+      msg += `  - ${s} [${d.id}]\n`;
+    }
+
+    msg += `\nTo remove a dependency, paste its id here (or Cancel):`;
+
+    const toRemove = prompt(msg, "");
+    if (toRemove === null) return;
+    const trimmed = toRemove.trim();
+    if (!trimmed) return;
+
+    const before = state.deps.length;
+    state.deps = state.deps.filter(d => d.id !== trimmed);
+    if (state.deps.length === before) {
+      alert("No dependency found with that id.");
+      return;
+    }
+    setState(state);
+  },
+
   editCard(cardId) {
     const card = state.cards.find(c => c.id === cardId);
     if (!card) return;
@@ -71,7 +167,15 @@ window.appActions = {
   },
 
   deleteCard(cardId) {
+    // delete card + clean up dependencies referencing it
     state.cards = state.cards.filter(c => c.id !== cardId);
+    state.deps = (state.deps ?? []).filter(d => d.fromId !== cardId && d.toId !== cardId);
+
+    // exit link mode if needed
+    if (state.ui?.linkSourceId === cardId) {
+      state.ui.linkMode = false;
+      state.ui.linkSourceId = null;
+    }
     setState(state);
   }
 };
@@ -85,7 +189,6 @@ function addCard() {
   const team = els.teamInput.value.trim() || null;
   const horizon = els.horizonSelect.value;
 
-  // Put card at end of horizon bucket (order within horizon/group is handled by DnD; for add, just append)
   const max = state.cards
     .filter(c => c.horizon === horizon)
     .reduce((m, x) => Math.max(m, x.order ?? 0), -1);
@@ -107,8 +210,12 @@ function addCard() {
 }
 
 function clearAll() {
-  if (!confirm("Clear ALL cards and snapshots?")) return;
-  setState({ ...state, cards: [], snapshots: [] });
+  if (!confirm("Clear ALL cards, deps, and snapshots?")) return;
+  state.cards = [];
+  state.deps = [];
+  state.snapshots = [];
+  state.ui = { linkMode: false, linkSourceId: null };
+  setState(state);
 }
 
 function createSnapshot() {
@@ -122,7 +229,8 @@ function createSnapshot() {
     name: trimmed,
     createdAt: new Date().toISOString(),
     data: {
-      cards: structuredClone(state.cards)
+      cards: structuredClone(state.cards),
+      deps: structuredClone(state.deps ?? [])
     }
   };
 
@@ -140,7 +248,6 @@ els.addCardBtn.onclick = addCard;
 els.clearAllBtn.onclick = clearAll;
 els.exportBtn.onclick = () => exportJSON(state);
 els.snapshotBtn.onclick = createSnapshot;
-
 els.groupBySelect.onchange = onGroupByChange;
 
 els.importFile.addEventListener("change", (e) => {
@@ -148,11 +255,12 @@ els.importFile.addEventListener("change", (e) => {
   if (!file) return;
 
   importJSON(file, (data) => {
-    // basic safety
-    if (!data || !Array.isArray(data.cards)) {
-      alert("That JSON doesn't look like a roadmap export.");
+    if (!data) {
+      alert("Invalid JSON file.");
       return;
     }
+    // ensure ui container
+    if (!data.ui) data.ui = { linkMode: false, linkSourceId: null };
     setState(data);
     els.importFile.value = "";
   });

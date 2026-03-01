@@ -80,3 +80,32 @@ button { cursor: pointer; }
 .actions button { padding: 4px 8px; font-size: 12px; }
 
 .danger { background: #fff; border: 1px solid #ddd; }
+.badges { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.02);
+  color: #333;
+}
+
+.badgeWarn { border-color: rgba(0,0,0,0.25); background: rgba(0,0,0,0.04); }
+.badgeRisk { border-color: #d09a00; background: rgba(208,154,0,0.12); }
+.badgeSevere { border-color: #c0392b; background: rgba(192,57,43,0.12); }
+
+.linkModeBanner {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.12);
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.card.linkSource {
+  outline: 3px solid rgba(0,0,0,0.35);
+}
