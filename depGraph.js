@@ -7,6 +7,10 @@ import { blockingMisalignment } from "./model.js";
 export function drawDependencyGraph({ state, svgEl, containerEl }) {
   if (!svgEl || !containerEl) return;
 
+  if (state.ui?.showDeps === false) {
+  svgEl.innerHTML = "";
+  return;
+}
   // Resize SVG to container
   const crect = containerEl.getBoundingClientRect();
   svgEl.setAttribute("viewBox", `0 0 ${crect.width} ${crect.height}`);

@@ -67,6 +67,9 @@ function renderCard(card, state, blocksOut, blocksIn, cardById) {
   el.draggable = true;
   el.dataset.cardId = card.id;
 
+  if (state.ui?.selectedCardId === card.id) {
+  el.classList.add("selected");
+
   if (state.ui?.linkMode && state.ui?.linkSourceId === card.id) {
     el.classList.add("linkSource");
   }

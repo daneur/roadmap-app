@@ -5,6 +5,9 @@ import { renderBoard } from "./board.js";
 import { wireDnD } from "./dnd.js";
 
 let state = loadState();
+if (!state.ui) state.ui = {};
+if (state.ui.showDeps === undefined) state.ui.showDeps = true; // default ON
+if (state.ui.selectedCardId === undefined) state.ui.selectedCardId = null;
 
 // UI state container (kept inside state so it persists safely across renders; not exported to snapshots)
 if (!state.ui) state.ui = { linkMode: false, linkSourceId: null };
@@ -26,6 +29,8 @@ const els = {
   importFile: document.getElementById("importFile"),
   snapshotBtn: document.getElementById("snapshotBtn"),
   snapshotSelect: document.getElementById("snapshotSelect"),
+  sidePanel: document.getElementById("sidePanel"),
+  showDepsToggle: document.getElementById("showDepsToggle"),
 };
 
 function setState(next) {
@@ -65,7 +70,205 @@ function renderLinkBanner() {
 
   b.appendChild(wrap);
 }
+function renderSidePanel() {
+  const panel = els.sidePanel;
+  const selectedId = state.ui?.selectedCardId;
 
+  if (!selectedId) {
+    panel.classList.add("hidden");
+    panel.setAttribute("aria-hidden", "true");
+    panel.innerHTML = "";
+    return;
+  }
+
+  const card = state.cards.find(c => c.id === selectedId);
+  if (!card) {
+    state.ui.selectedCardId = null;
+    setState(state);
+    return;
+  }
+
+  const outgoing = (state.deps ?? []).filter(d => d.fromId === selectedId && d.kind === "blocks");
+  const incoming = (state.deps ?? []).filter(d => d.toId === selectedId && d.kind === "blocks");
+
+  panel.classList.remove("hidden");
+  panel.setAttribute("aria-hidden", "false");
+
+  // Build UI
+  panel.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "panelHeader";
+
+  const left = document.createElement("div");
+  const title = document.createElement("div");
+  title.className = "panelTitle";
+  title.textContent = card.title;
+
+  const sub = document.createElement("div");
+  sub.className = "panelSub";
+  sub.textContent = `Horizon: ${card.horizon} • Platform: ${card.platform ?? "—"} • Theme: ${card.theme ?? "—"} • Team: ${card.team ?? "—"}`;
+
+  left.appendChild(title);
+  left.appendChild(sub);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "smallBtn";
+  closeBtn.textContent = "Close";
+  closeBtn.onclick = () => {
+    state.ui.selectedCardId = null;
+    setState(state);
+  };
+
+  header.appendChild(left);
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  // Add dependency section
+  const addSection = document.createElement("div");
+  addSection.className = "panelSection";
+
+  const addLabel = document.createElement("div");
+  addLabel.className = "panelTitle";
+  addLabel.textContent = "Add dependency (this blocks…)";
+
+  const select = document.createElement("select");
+  select.className = "select";
+
+  const opt0 = document.createElement("option");
+  opt0.value = "";
+  opt0.textContent = "(choose a target)";
+  select.appendChild(opt0);
+
+  const candidates = state.cards
+    .filter(c => c.id !== selectedId)
+    .sort((a, b) => a.title.localeCompare(b.title));
+
+  for (const c of candidates) {
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.title;
+    select.appendChild(opt);
+  }
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "smallBtn";
+  addBtn.style.marginTop = "8px";
+  addBtn.textContent = "Add blocks →";
+  addBtn.onclick = () => {
+    const toId = select.value;
+    if (!toId) return;
+
+    const exists = (state.deps ?? []).some(d => d.fromId === selectedId && d.toId === toId && d.kind === "blocks");
+    if (!exists) {
+      state.deps.push({ id: genId(), fromId: selectedId, toId, kind: "blocks" });
+      setState(state);
+    }
+  };
+
+  addSection.appendChild(addLabel);
+  addSection.appendChild(select);
+  addSection.appendChild(addBtn);
+  panel.appendChild(addSection);
+
+  // Outgoing list
+  const outSection = document.createElement("div");
+  outSection.className = "panelSection";
+
+  const outTitle = document.createElement("div");
+  outTitle.className = "panelTitle";
+  outTitle.textContent = `Blocks (${outgoing.length})`;
+
+  outSection.appendChild(outTitle);
+
+  if (outgoing.length === 0) {
+    const p = document.createElement("div");
+    p.className = "panelSub";
+    p.textContent = "(none)";
+    outSection.appendChild(p);
+  } else {
+    for (const d of outgoing) {
+      const t = state.cards.find(c => c.id === d.toId);
+      const row = document.createElement("div");
+      row.className = "depRow";
+
+      const info = document.createElement("div");
+      const t1 = document.createElement("div");
+      t1.className = "depRowTitle";
+      t1.textContent = t?.title ?? "(missing)";
+
+      const t2 = document.createElement("div");
+      t2.className = "depRowMeta";
+      t2.textContent = `id: ${d.id}`;
+
+      info.appendChild(t1);
+      info.appendChild(t2);
+
+      const rm = document.createElement("button");
+      rm.className = "smallBtn";
+      rm.textContent = "Remove";
+      rm.onclick = () => {
+        state.deps = state.deps.filter(x => x.id !== d.id);
+        setState(state);
+      };
+
+      row.appendChild(info);
+      row.appendChild(rm);
+      outSection.appendChild(row);
+    }
+  }
+
+  panel.appendChild(outSection);
+
+  // Incoming list
+  const inSection = document.createElement("div");
+  inSection.className = "panelSection";
+
+  const inTitle = document.createElement("div");
+  inTitle.className = "panelTitle";
+  inTitle.textContent = `Blocked by (${incoming.length})`;
+
+  inSection.appendChild(inTitle);
+
+  if (incoming.length === 0) {
+    const p = document.createElement("div");
+    p.className = "panelSub";
+    p.textContent = "(none)";
+    inSection.appendChild(p);
+  } else {
+    for (const d of incoming) {
+      const s = state.cards.find(c => c.id === d.fromId);
+      const row = document.createElement("div");
+      row.className = "depRow";
+
+      const info = document.createElement("div");
+      const t1 = document.createElement("div");
+      t1.className = "depRowTitle";
+      t1.textContent = s?.title ?? "(missing)";
+
+      const t2 = document.createElement("div");
+      t2.className = "depRowMeta";
+      t2.textContent = `id: ${d.id}`;
+
+      info.appendChild(t1);
+      info.appendChild(t2);
+
+      const rm = document.createElement("button");
+      rm.className = "smallBtn";
+      rm.textContent = "Remove";
+      rm.onclick = () => {
+        state.deps = state.deps.filter(x => x.id !== d.id);
+        setState(state);
+      };
+
+      row.appendChild(info);
+      row.appendChild(rm);
+      inSection.appendChild(row);
+    }
+  }
+
+  panel.appendChild(inSection);
+}
 function renderSnapshotDropdown() {
   const sel = els.snapshotSelect;
   sel.innerHTML = "";
@@ -85,9 +288,13 @@ function renderSnapshotDropdown() {
 
 function render() {
   els.groupBySelect.value = state.groupBy || "platform";
+  els.showDepsToggle.checked = state.ui.showDeps !== false;
+
   renderSnapshotDropdown();
   renderLinkBanner();
   renderBoard(state, els.lanesContainer);
+
+  renderSidePanel();
 
   // draw arrows after DOM cards exist
   drawDependencyGraph({ state, svgEl: els.depSvg, containerEl: els.boardWrap });
@@ -96,16 +303,30 @@ function render() {
 // Expose actions for board.js
 window.appActions = {
   onCardClicked(cardId) {
-    // Link mode: clicking a target creates a dependency
-    if (state.ui?.linkMode && state.ui?.linkSourceId) {
-      const fromId = state.ui.linkSourceId;
-      const toId = cardId;
-      if (fromId === toId) return;
+  // If in link mode, clicking target creates dependency
+  if (state.ui?.linkMode && state.ui?.linkSourceId) {
+    const fromId = state.ui.linkSourceId;
+    const toId = cardId;
+    if (fromId === toId) return;
 
-      const exists = (state.deps ?? []).some(d => d.fromId === fromId && d.toId === toId && d.kind === "blocks");
-      if (!exists) {
-        state.deps.push({ id: genId(), fromId, toId, kind: "blocks" });
-      }
+    const exists = (state.deps ?? []).some(d => d.fromId === fromId && d.toId === toId && d.kind === "blocks");
+    if (!exists) {
+      state.deps.push({ id: genId(), fromId, toId, kind: "blocks" });
+    }
+
+    state.ui.linkMode = false;
+    state.ui.linkSourceId = null;
+
+    // Also select the target so panel opens on it (nice flow)
+    state.ui.selectedCardId = toId;
+    setState(state);
+    return;
+  }
+
+  // Normal click: select card → open side panel
+  state.ui.selectedCardId = cardId;
+  setState(state);
+},
 
       // exit link mode
       state.ui.linkMode = false;
@@ -115,26 +336,12 @@ window.appActions = {
   },
 
   startLinkFrom(cardId) {
-    state.ui.linkMode = true;
-    state.ui.linkSourceId = cardId;
-    setState(state);
-  },
+  state.ui.linkMode = true;
+  state.ui.linkSourceId = cardId;
+  state.ui.selectedCardId = cardId;
+  setState(state);
+},
 
-  manageDeps(cardId) {
-    const outgoing = (state.deps ?? []).filter(d => d.fromId === cardId);
-    const incoming = (state.deps ?? []).filter(d => d.toId === cardId);
-
-    const card = state.cards.find(c => c.id === cardId);
-    const name = card?.title ?? "Card";
-
-    let msg = `Dependencies for:\n"${name}"\n\n`;
-
-    msg += `Blocks:\n`;
-    if (outgoing.length === 0) msg += `  (none)\n`;
-    for (const d of outgoing) {
-      const t = state.cards.find(c => c.id === d.toId)?.title ?? "(missing)";
-      msg += `  - ${t} [${d.id}]\n`;
-    }
 
     msg += `\nBlocked by:\n`;
     if (incoming.length === 0) msg += `  (none)\n`;
@@ -181,6 +388,9 @@ window.appActions = {
     if (state.ui?.linkSourceId === cardId) {
       state.ui.linkMode = false;
       state.ui.linkSourceId = null;
+    }
+
+    if (state.ui?.selectedCardId === cardId) state.ui.selectedCardId = null;
     }
     setState(state);
   }
@@ -255,6 +465,11 @@ els.clearAllBtn.onclick = clearAll;
 els.exportBtn.onclick = () => exportJSON(state);
 els.snapshotBtn.onclick = createSnapshot;
 els.groupBySelect.onchange = onGroupByChange;
+
+els.showDepsToggle.addEventListener("change", () => {
+  state.ui.showDeps = els.showDepsToggle.checked;
+  setState(state);
+});
 
 els.importFile.addEventListener("change", (e) => {
   const file = e.target.files?.[0];
